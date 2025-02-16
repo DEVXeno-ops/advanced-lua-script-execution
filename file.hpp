@@ -2,131 +2,122 @@
 
 #include <string>
 #include <Windows.h>
+#include <memory>
 
 namespace win32
 {
     class File
     {
     private:
-
-        std::string fileName = nullptr;
+        std::string fileName;
 
     public:
-
         ~File() = default;
         File(const std::string& fileName) : fileName(fileName) {}
 
     public:
-
         bool Read(std::string& content)
         {
-            auto fileHandle = HANDLE(); //Define the file handle obj.
+            HANDLE fileHandle = INVALID_HANDLE_VALUE; // Initialize handle.
 
-            if (!this->GetFileHandle(OPEN_ALWAYS, fileHandle))
+            if (!this->GetFileHandle(OPEN_EXISTING, fileHandle))
             {
-                return false; //Return false since handle is invalid.
+                return false; // Return false if handle is invalid.
             }
 
-            const auto fileSize = GetFileSize( //Retrieve file size.
-                fileHandle, nullptr);
+            const DWORD fileSize = GetFileSize(fileHandle, nullptr); // Get file size.
 
-            auto buffer = new char[fileSize]; //Setup the buffer ptr.
-
-            auto bytesRead = DWORD(); //Define readed bytes size obj.
-
-            const auto result = ReadFile(fileHandle, buffer,
-                fileSize, &bytesRead, nullptr);
-
-            CloseHandle(fileHandle); //Close the created file handle.
-
-            if (result != 0) //Check if the readed results were valid.
+            if (fileSize == INVALID_FILE_SIZE) // Check for errors in getting file size.
             {
-                content.assign(buffer, fileSize); //Assign buf to str.
+                CloseHandle(fileHandle);
+                return false;
             }
 
-            delete[] buffer; //Delete the assigned buffer for content.
+            std::vector<char> buffer(fileSize); // Use vector for automatic memory management.
 
-            return result != 0; //Check if the file results are valid.
+            DWORD bytesRead = 0;
+            const BOOL result = ReadFile(fileHandle, buffer.data(), fileSize, &bytesRead, nullptr);
+
+            CloseHandle(fileHandle); // Close the file handle.
+
+            if (result == 0 || bytesRead != fileSize) // Check if reading was successful.
+            {
+                return false;
+            }
+
+            content.assign(buffer.begin(), buffer.end()); // Assign buffer to string.
+
+            return true;
         }
 
         bool Write(const std::string& content)
         {
-            auto fileHandle = HANDLE(); //Define the file handle obj.
+            HANDLE fileHandle = INVALID_HANDLE_VALUE; // Initialize handle.
 
             if (!this->GetFileHandle(CREATE_ALWAYS, fileHandle))
             {
-                return false; //Return false since handle is invalid.
+                return false; // Return false if handle is invalid.
             }
 
-            auto bytesWritten = DWORD(); //Define written bytes object.
+            DWORD bytesWritten = 0;
+            const BOOL result = WriteFile(fileHandle, content.c_str(), content.size(), &bytesWritten, NULL);
 
-            const auto result = WriteFile(fileHandle,
-                content.c_str(), content.size(), &bytesWritten, NULL);
+            CloseHandle(fileHandle); // Close the file handle.
 
-            CloseHandle(fileHandle); //Close the created file handle.
-
-            return result != 0; //Check if the file results are valid.
+            return result != 0 && bytesWritten == content.size(); // Ensure the write was successful.
         }
 
     private:
-
         bool GetFileHandle(DWORD flag, HANDLE& handle)
         {
-            handle = CreateFileA(this->fileName.c_str(), 0xc0000000,
+            handle = CreateFileA(this->fileName.c_str(), GENERIC_READ | GENERIC_WRITE,
                 0, nullptr, flag, FILE_ATTRIBUTE_NORMAL, nullptr);
 
-            if (handle == INVALID_HANDLE_VALUE) //Validate the handle.
+            if (handle == INVALID_HANDLE_VALUE) // Check if handle is valid.
             {
-                return false; //Return false the handle is not valid.
+                return false; // Return false if the handle is invalid.
             }
 
-            return true; //Return true since all went as we expected.
+            return true; // Handle is valid.
         }
     };
 
-
     inline bool FileExists(const std::string& path)
     {
-        const auto attributes = GetFileAttributesA(path.data()); //Get.
+        const DWORD attributes = GetFileAttributesA(path.c_str()); // Get file attributes.
 
-        return (attributes != INVALID_FILE_ATTRIBUTES)
-            && !(attributes & FILE_ATTRIBUTE_DIRECTORY); //Check file.
+        return (attributes != INVALID_FILE_ATTRIBUTES) && !(attributes & FILE_ATTRIBUTE_DIRECTORY); // Check if it is a file.
     }
 
     inline bool DirectoryExists(const std::string& path)
     {
-        const auto attributes = GetFileAttributesA(path.data()); //Get.
+        const DWORD attributes = GetFileAttributesA(path.c_str()); // Get directory attributes.
 
-        if (attributes == INVALID_FILE_ATTRIBUTES) //Validate file att.
-        {
-            return false; //Return false since invalid file attributes.
-        }
-
-        return (attributes & FILE_ATTRIBUTE_DIRECTORY); //Check direct.
+        return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY); // Check if it is a directory.
     }
 
-    inline bool CreateNewDirectory(
-        const std::string& path, bool createAlways = false)
+    inline bool CreateNewDirectory(const std::string& path, bool createAlways = false)
     {
-        if (DirectoryExists(path.data()) && createAlways == 0) //Check.
+        if (DirectoryExists(path) && !createAlways) // Check if directory exists and if it should not be created.
         {
-            return true; //Return false since the directory is active.
+            return true; // Return true since the directory is already present.
         }
 
-        return CreateDirectoryA(path.c_str(), nullptr) != 0; //Make it.
+        return CreateDirectoryA(path.c_str(), nullptr) != 0; // Try to create the directory.
     }
+
     inline void delay(int milliseconds)
     {
-        Sleep(milliseconds);
+        Sleep(static_cast<DWORD>(milliseconds)); // Sleep for specified milliseconds.
     }
 
     inline void clear()
     {
-        system("cls");
+        system("cls"); // Clear the console.
     }
 
     inline void pause()
     {
-        system("pause");
+        system("pause"); // Pause the system (wait for user input).
     }
 }

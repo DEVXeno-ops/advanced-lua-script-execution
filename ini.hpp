@@ -2,140 +2,115 @@
 
 #include <map>
 #include <sstream>
-
 #include "file.hpp"
+#include "lua.hpp" // Include Lua header
 
 namespace pIni
 {
     class Section
     {
     private:
-
         std::map<std::string, std::string> m_data;
-
     public:
-
         const std::map<std::string, std::string>& GetData() const
         {
-            return this->m_data; //Return the desired data content.
+            return this->m_data;
         }
 
         bool Exist(const std::string& data)
         {
-            auto it = m_data.find(data);
-
-            if (it != m_data.end())
-            {
-                return true;
-            }
-
-            return false;
+            return m_data.find(data) != m_data.end();
         }
-
-    public:
 
         std::string& operator[](const std::string& key)
         {
-            return this->m_data[key]; //Return the desired content.
+            return this->m_data[key];
         }
     };
-
 
     class Archive
     {
     private:
-
         struct
         {
             std::string m_fileName;
-
             std::map<std::string, Section> m_sections;
         };
 
     public:
-
         Archive(const std::string& filename) : m_fileName(filename)
         {
-            auto content = std::string(); //Define the content obj.
+            auto content = std::string();
+            auto file = win32::File(filename);
 
-            auto file = win32::File(filename); //Define file object.
-
-            if (!file.Read(content)) //Check if process can read it.
+            if (!file.Read(content))
             {
-                return; //Return since it couldn't read the content.
+                return;
             }
 
-            auto line = std::string(); //Define the line string obj.
+            auto line = std::string();
+            auto section = std::string();
+            auto contentStream = std::istringstream(content);
 
-            auto section = std::string(); //Define section str obj.
-
-            auto contentStream = std::istringstream(content); //ISS.
-
-            while (std::getline(contentStream, line)) //Loop lines.
+            while (std::getline(contentStream, line))
             {
-                if (line.empty()) //Check if the current line empty.
-                {
-                    continue; //Ignore line since this one is empty.
-                }
+                if (line.empty()) continue;
 
-                if (line[0] == '[' && line.back() == ']') //Section.
+                if (line[0] == '[' && line.back() == ']')
                 {
                     section = line.substr(1, line.size() - 2);
                 }
-                else //The line was not a section but has str saved. 
+                else
                 {
-                    auto delimiterPos = line.find('='); //Find char.
-
-                    if (delimiterPos != std::string::npos) //Vaidate.
+                    auto delimiterPos = line.find('=');
+                    if (delimiterPos != std::string::npos)
                     {
-                        this->m_sections[section][line.substr(0, 
-                            delimiterPos)] =line.substr(delimiterPos
-                                + 1);
+                        this->m_sections[section][line.substr(0, delimiterPos)] = line.substr(delimiterPos + 1);
                     }
                 }
             }
         }
 
-    public:
-
         void Save()
         {
-            auto contentStream = std::ostringstream(); //SS content.
-
-            for (const auto& section : this->m_sections) //Loop all.
+            auto contentStream = std::ostringstream();
+            for (const auto& section : this->m_sections)
             {
                 contentStream << "[" << section.first << "]\n";
-
                 for (const auto& entry : section.second.GetData())
                 {
-                    contentStream << 
-                        entry.first << "=" << entry.second << "\n";
+                    contentStream << entry.first << "=" << entry.second << "\n";
                 }
-
-                contentStream << "\n"; //Write the escape sequence.
+                contentStream << "\n";
             }
 
-            auto file = win32::File(this->m_fileName); //Set file.
-
-            file.Write(contentStream.str()); //Save changes to file.
+            auto file = win32::File(this->m_fileName);
+            file.Write(contentStream.str());
         }
 
         bool Exist(const std::string& section)
         {
-            if (this->m_sections.find(
-                section) != this->m_sections.end()) //Find section.
-            {
-                return true; //Return true since the section exists.
-            }
-
-            return false; //Return false since section isnt in vec.
+            return this->m_sections.find(section) != this->m_sections.end();
         }
-
-    public:
 
         Section& operator[](const std::string& section)
         {
-            return this->m_sections[section]; //Return sect content.
+            return this->m_sections[section];
+        }
+
+        void ExecuteLuaScript(lua_State* L, const std::string& section)
+        {
+            if (!Exist(section)) return;
+
+            for (const auto& entry : this->m_sections[section].GetData())
+            {
+                std::string script = entry.second;
+                if (luaL_dostring(L, script.c_str()) != LUA_OK)
+                {
+                    printf("Lua Error: %s\n", lua_tostring(L, -1));
+                    lua_pop(L, 1);
+                }
+            }
         }
     };
 }
