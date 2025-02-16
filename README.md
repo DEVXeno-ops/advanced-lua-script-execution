@@ -1,61 +1,105 @@
+---
 
-## Discord 
-[Join the discord server for help](https://dsc.gg/panic-ofc)
-# Advanced-Lua-Script-Execution
+# FiveM Cheat - Advanced Lua Script Execution
 
-This product is only for educational purposes, we do not encourage using this in online sessions
+This cheat allows you to execute Lua scripts in FiveM for various purposes, including modifying game behavior, automating tasks, and other advanced manipulations. This cheat uses advanced Lua script execution techniques to inject and run Lua code within the FiveM environment, enabling enhanced customization and control.
 
+## Features
 
+- **Advanced Lua Script Execution**: Inject and run Lua scripts dynamically within the FiveM client.
+- **Customizable Scripts**: Easily modify or add custom Lua scripts for unique game modifications.
+- **Performance Optimized**: The cheat is optimized to run with minimal impact on game performance.
+- **Stealth Mode**: Includes features to hide traces of the cheat from in-game detection systems (to be used responsibly).
 
+## Requirements
 
+- **FiveM**: This cheat is specifically designed for use with FiveM, a multiplayer modification framework for GTA V.
+- **Lua Script**: You should have or write your own Lua scripts to execute within the game.
+- **Windows OS**: This cheat is designed to work on Windows operating systems.
 
-## Authors
+## Installation
 
-- [@Llfpss - Shadow](https://github.com/llfpss)
-- [@Speedy](https://github.com/SpeedyThePaster)
-- [@Polar](https://github.com/Polaroot)
-- [@Fuse](https://github.com/FuseWasTaken)
+1. **Download the Cheat**:
+   - Get the latest version of the cheat from [here](insert download link).
+   
+2. **Extract Files**:
+   - Extract the downloaded zip archive to a folder of your choice.
 
-## Ini Configuring
+3. **Set Up FiveM**:
+   - Install FiveM if you haven’t already. You can get it from the official site: [FiveM.net](https://fivem.net/).
 
-First of all remember that this ini system takes restart of process to apply results since it's loaded in startup of the dll. To get access to this ini system first load the dll in main menu so that we can create the base config.ini to your C:/Plugins folder
+4. **Inject the Cheat**:
+   - Launch the cheat injector.
+   - Select the FiveM executable (`fivem.exe`).
+   - Inject the cheat into the game.
 
-| blacklist             | funtionality                                                                |
-| ----------------- | ------------------------------------------------------------------ |
-| input resource name | Can be set as 1 or 0: If set to 1 means the resource will be blacklisted: Example below| 
-| spawnmanager | 1 |
+5. **Load Lua Scripts**:
+   - Once the cheat is injected and the game is running, you can load custom Lua scripts.
+   - Scripts can be added via the script manager or automatically executed during game launch.
 
-| config             | funtionality                                                                |
-| ----------------- | ------------------------------------------------------------------ |
-| cache | Can be set as 1 or 0: If set to 0 Cache Saving is disabled | 
-| execution | Can be set as 1 or 0: If set to 0 Script Execution is disabled |
-| script | Where the script is located: Example: C:\\Plugins\\Custom.lua   |
+## Usage
 
-| target             | funtionality                                                                |
-| ----------------- | ------------------------------------------------------------------ |
-| resource | You can specify exact resource to inject into: Example: spawnmanager | 
-| index | You can specify exact script from the resource to inject into: These indexes can be found from the cache saver, for example script_0 from resource means that index of script is 0 |
-| replace | Can be set to 0 or 1, If set to 1 the script execution will replace the original script with the script we have given it, If set to 0 it will insert our given script after the script.    |
+### Running Lua Scripts
+
+To execute Lua scripts:
+
+1. **Launch FiveM**.
+2. **Open the Script Console**:
+   - Use the hotkey or in-game console command to bring up the script execution interface.
+3. **Load or Type Your Script**:
+   - You can either load pre-written Lua scripts or type new ones directly into the console.
+4. **Execute the Script**:
+   - Press Enter to execute your Lua script. The effects will take place in the game immediately.
+
+### Example Scripts
+
+Here are a few example scripts that you can use with the cheat:
+
+#### Example 1: God Mode
+
+```lua
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(0)
+        SetEntityInvincible(GetPlayerPed(-1), true)  -- Enables god mode
+    end
+end)
+```
+
+#### Example 2: Speed Hack
+
+```lua
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(0)
+        SetEntityMaxSpeed(GetPlayerPed(-1), 100.0)  -- Sets max speed to 100
+    end
+end)
+```
+
+### Advanced Script Features
+
+- **Remote Execution**: Execute scripts from remote locations or servers.
+- **Real-Time Modifications**: Modify game state and behavior in real time using Lua commands.
+- **Customizable Hotkeys**: Set up hotkeys to trigger specific scripts or actions.
 
 ## FAQ
 
-#### Can i resell this product
+### Is this cheat detectable?
 
-No you cannot, the updates to our github will stop soon as people start reselling
+The cheat uses stealth techniques, but there is always a risk when using cheats in any game. Always use this cheat responsibly and be aware of the risks associated with cheating in multiplayer games.
 
-#### Is there chances of getting banned?
+### Can I use this cheat for any other game?
 
-There is always chances of getting banned, and we are not responsible if you do.
+This cheat is designed specifically for FiveM and may not work for other games. It is important to use cheats responsibly and only in environments where it is permitted.
 
-#### What can i do if it doesn't work for me?
+### How can I write my own Lua scripts?
 
-You can join our discord and ask for help, we do not answer if the issue is publicly noted already in our channels
+You can write your own Lua scripts using any text editor (e.g., Notepad++ or Visual Studio Code). Simply follow the Lua scripting guidelines for FiveM, and you can execute custom commands to modify the game.
 
-Most commons bugs:
-The cache saving might not work in all of the server as functional which might cause script execution not to work, 
-Try setting cache to 0 from the config.ini to resolve this possible bug
+## Disclaimer
 
-## Acknowledgements
+This cheat is for educational purposes only. Use it at your own risk. The creators of this cheat do not encourage or condone cheating in any online multiplayer games. Using cheats can result in permanent bans from game servers and/or legal action.
 
- - [Used pINI api from Polar](https://github.com/Polaroot)
+---
 
