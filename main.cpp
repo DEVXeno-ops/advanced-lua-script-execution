@@ -2,9 +2,9 @@
 #include <map>
 #include <vector>
 #include <iostream>
-#include <unordered_set>
+#include <unordered_map>
 #include <regex>
-#include <mutex>
+#include <shared_mutex>
 #include <functional>
 #include <string>
 
@@ -33,7 +33,7 @@ namespace memory {
         g_allResources = reinterpret_cast<std::vector<fx::ResourceImpl*>*>(resourceModule + 0xAE6C0);
         g_netLibrary = reinterpret_cast<fx::NetLibrary**>(netFiveModule + 0x1F41D8);
 
-        if (!g_allResources || g_allResources->empty() || !g_netLibrary) {
+        if (!g_allResources || !g_netLibrary) {
             MessageBoxA(0, "Memory initialization failed. Offsets might be outdated.", "Error", MB_ICONERROR);
             return false;
         }
@@ -41,7 +41,7 @@ namespace memory {
     }
 
     void ForAllResources(const std::function<void(fx::ResourceImpl*)>& cb) {
-        if (g_allResources && !g_allResources->empty()) {
+        if (g_allResources) {
             for (auto& resource : *g_allResources) {
                 if (resource) {
                     cb(resource);
@@ -57,8 +57,14 @@ namespace ch {
     std::string SanitizeFileName(const std::string& filename) {
         static const std::unordered_set<char> illegalChars = {'\\', '/', ':', '*', '?', '"', '<', '>', '|'};
         std::string result;
-        std::copy_if(filename.begin(), filename.end(), std::back_inserter(result),
-            [&](char c) { return illegalChars.find(c) == illegalChars.end(); });
+        result.reserve(filename.size());
+        
+        for (char c : filename) {
+            if (illegalChars.find(c) == illegalChars.end()) {
+                result.push_back(c);
+            }
+        }
+        
         return std::regex_replace(result, std::regex("http"), "");
     }
 
@@ -69,29 +75,27 @@ namespace ch {
         int GetIndex() const { return m_index; }
         const std::string& GetData() const { return m_data; }
     private:
-        int m_index;
+        int m_index = -1;
         std::string m_data;
     };
 
     class CachedResource {
     public:
         bool AddCachedScript(int index, const std::string& data, const std::string& directoryPath) {
-            std::lock_guard<std::mutex> lock(m_mutex);
+            std::unique_lock<std::shared_mutex> lock(m_mutex);
 
-            // Avoid duplicating scripts by checking index and data
-            for (const auto& script : m_cachedScripts) {
-                if (script.GetIndex() == index || script.GetData().find(data) != std::string::npos) {
-                    return false;
-                }
+            // Avoid duplication
+            if (m_cachedScripts.find(index) != m_cachedScripts.end()) {
+                return false;
             }
 
             CachedScript newScript;
             newScript.SetIndex(index);
             newScript.SetData(data);
-            m_cachedScripts.push_back(newScript);
+            m_cachedScripts[index] = newScript;
 
             win32::File fileHandle(directoryPath + GetName() + "\\script_" + std::to_string(index) + ".lua");
-            return fileHandle.Write(data); // Ensure file is written successfully
+            return fileHandle.Write(data);
         }
 
         void SetName(const std::string& name) { m_name = name; }
@@ -99,8 +103,8 @@ namespace ch {
 
     private:
         std::string m_name;
-        std::vector<CachedScript> m_cachedScripts;
-        std::mutex m_mutex;
+        std::unordered_map<int, CachedScript> m_cachedScripts;
+        mutable std::shared_mutex m_mutex;
     };
 
     std::vector<CachedResource> g_cachedResources;
@@ -109,7 +113,7 @@ namespace ch {
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved) {
     if (reason == DLL_PROCESS_ATTACH) {
         if (!memory::InitMemory()) {
-            return FALSE; // Return false if initialization fails
+            return FALSE;
         }
     }
     return TRUE;
