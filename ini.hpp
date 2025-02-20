@@ -17,7 +17,7 @@ namespace pIni
             return this->m_data;
         }
 
-        bool Exist(const std::string& data)
+        bool Exist(const std::string& data) const
         {
             return m_data.find(data) != m_data.end();
         }
@@ -26,55 +26,59 @@ namespace pIni
         {
             return this->m_data[key];
         }
+
+        const std::string& GetValue(const std::string& key, const std::string& defaultValue = "") const
+        {
+            auto it = m_data.find(key);
+            return (it != m_data.end()) ? it->second : defaultValue;
+        }
     };
 
     class Archive
     {
     private:
-        struct
-        {
-            std::string m_fileName;
-            std::map<std::string, Section> m_sections;
-        };
-
+        std::string m_fileName;
+        std::map<std::string, Section> m_sections;
+    
     public:
-        Archive(const std::string& filename) : m_fileName(filename)
+        explicit Archive(const std::string& filename) : m_fileName(filename)
         {
-            auto content = std::string();
-            auto file = win32::File(filename);
+            std::string content;
+            win32::File file(filename);
 
             if (!file.Read(content))
             {
                 return;
             }
 
-            auto line = std::string();
-            auto section = std::string();
-            auto contentStream = std::istringstream(content);
+            std::istringstream contentStream(content);
+            std::string line, section;
 
             while (std::getline(contentStream, line))
             {
-                if (line.empty()) continue;
+                if (line.empty() || line[0] == ';' || line[0] == '#') continue; // Ignore comments
 
-                if (line[0] == '[' && line.back() == ']')
+                if (line.front() == '[' && line.back() == ']')
                 {
                     section = line.substr(1, line.size() - 2);
                 }
-                else
+                else if (!section.empty())
                 {
                     auto delimiterPos = line.find('=');
                     if (delimiterPos != std::string::npos)
                     {
-                        this->m_sections[section][line.substr(0, delimiterPos)] = line.substr(delimiterPos + 1);
+                        std::string key = line.substr(0, delimiterPos);
+                        std::string value = line.substr(delimiterPos + 1);
+                        m_sections[section][key] = value;
                     }
                 }
             }
         }
 
-        void Save()
+        void Save() const
         {
-            auto contentStream = std::ostringstream();
-            for (const auto& section : this->m_sections)
+            std::ostringstream contentStream;
+            for (const auto& section : m_sections)
             {
                 contentStream << "[" << section.first << "]\n";
                 for (const auto& entry : section.second.GetData())
@@ -84,28 +88,32 @@ namespace pIni
                 contentStream << "\n";
             }
 
-            auto file = win32::File(this->m_fileName);
+            win32::File file(m_fileName);
             file.Write(contentStream.str());
         }
 
-        bool Exist(const std::string& section)
+        bool Exist(const std::string& section) const
         {
-            return this->m_sections.find(section) != this->m_sections.end();
+            return m_sections.find(section) != m_sections.end();
         }
 
         Section& operator[](const std::string& section)
         {
-            return this->m_sections[section];
+            if (!Exist(section))
+            {
+                throw std::runtime_error("Section does not exist: " + section);
+            }
+            return m_sections[section];
         }
 
-        void ExecuteLuaScript(lua_State* L, const std::string& section)
+        void ExecuteLuaScript(lua_State* L, const std::string& section) const
         {
             if (!Exist(section)) return;
 
-            for (const auto& entry : this->m_sections[section].GetData())
+            for (const auto& entry : m_sections.at(section).GetData())
             {
-                std::string script = entry.second;
-                if (luaL_dostring(L, script.c_str()) != LUA_OK)
+                const std::string& script = entry.second;
+                if (luaL_loadstring(L, script.c_str()) != LUA_OK || lua_pcall(L, 0, LUA_MULTRET, 0) != LUA_OK)
                 {
                     printf("Lua Error: %s\n", lua_tostring(L, -1));
                     lua_pop(L, 1);

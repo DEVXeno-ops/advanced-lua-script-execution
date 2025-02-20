@@ -3,6 +3,7 @@
 #include <string>
 #include <Windows.h>
 #include <memory>
+#include <vector>
 
 namespace win32
 {
@@ -12,112 +13,104 @@ namespace win32
         std::string fileName;
 
     public:
-        ~File() = default;
         File(const std::string& fileName) : fileName(fileName) {}
+        ~File() = default;
 
-    public:
         bool Read(std::string& content)
         {
-            HANDLE fileHandle = INVALID_HANDLE_VALUE; // Initialize handle.
-
-            if (!this->GetFileHandle(OPEN_EXISTING, fileHandle))
+            HANDLE fileHandle = INVALID_HANDLE_VALUE;
+            if (!GetFileHandle(OPEN_EXISTING, fileHandle))
             {
-                return false; // Return false if handle is invalid.
+                return false;
             }
 
-            const DWORD fileSize = GetFileSize(fileHandle, nullptr); // Get file size.
-
-            if (fileSize == INVALID_FILE_SIZE) // Check for errors in getting file size.
+            const DWORD fileSize = GetFileSize(fileHandle, nullptr);
+            if (fileSize == INVALID_FILE_SIZE)
             {
                 CloseHandle(fileHandle);
                 return false;
             }
 
-            std::vector<char> buffer(fileSize); // Use vector for automatic memory management.
-
+            std::vector<char> buffer(fileSize);
             DWORD bytesRead = 0;
             const BOOL result = ReadFile(fileHandle, buffer.data(), fileSize, &bytesRead, nullptr);
+            CloseHandle(fileHandle);
 
-            CloseHandle(fileHandle); // Close the file handle.
-
-            if (result == 0 || bytesRead != fileSize) // Check if reading was successful.
+            if (result == 0 || bytesRead != fileSize)
             {
                 return false;
             }
 
-            content.assign(buffer.begin(), buffer.end()); // Assign buffer to string.
-
+            content.assign(buffer.begin(), buffer.end());
             return true;
         }
 
         bool Write(const std::string& content)
         {
-            HANDLE fileHandle = INVALID_HANDLE_VALUE; // Initialize handle.
-
-            if (!this->GetFileHandle(CREATE_ALWAYS, fileHandle))
+            HANDLE fileHandle = INVALID_HANDLE_VALUE;
+            if (!GetFileHandle(CREATE_ALWAYS, fileHandle))
             {
-                return false; // Return false if handle is invalid.
+                return false;
             }
 
             DWORD bytesWritten = 0;
-            const BOOL result = WriteFile(fileHandle, content.c_str(), content.size(), &bytesWritten, NULL);
+            const BOOL result = WriteFile(fileHandle, content.c_str(), content.size(), &bytesWritten, nullptr);
+            CloseHandle(fileHandle);
 
-            CloseHandle(fileHandle); // Close the file handle.
-
-            return result != 0 && bytesWritten == content.size(); // Ensure the write was successful.
+            return result != 0 && bytesWritten == content.size();
         }
 
     private:
-        bool GetFileHandle(DWORD flag, HANDLE& handle)
+        bool GetFileHandle(DWORD flag, HANDLE& handle) const
         {
-            handle = CreateFileA(this->fileName.c_str(), GENERIC_READ | GENERIC_WRITE,
+            handle = CreateFileA(fileName.c_str(), GENERIC_READ | GENERIC_WRITE,
                 0, nullptr, flag, FILE_ATTRIBUTE_NORMAL, nullptr);
 
-            if (handle == INVALID_HANDLE_VALUE) // Check if handle is valid.
-            {
-                return false; // Return false if the handle is invalid.
-            }
-
-            return true; // Handle is valid.
+            return handle != INVALID_HANDLE_VALUE;
         }
     };
 
     inline bool FileExists(const std::string& path)
     {
-        const DWORD attributes = GetFileAttributesA(path.c_str()); // Get file attributes.
-
-        return (attributes != INVALID_FILE_ATTRIBUTES) && !(attributes & FILE_ATTRIBUTE_DIRECTORY); // Check if it is a file.
+        const DWORD attributes = GetFileAttributesA(path.c_str());
+        return (attributes != INVALID_FILE_ATTRIBUTES) && !(attributes & FILE_ATTRIBUTE_DIRECTORY);
     }
 
     inline bool DirectoryExists(const std::string& path)
     {
-        const DWORD attributes = GetFileAttributesA(path.c_str()); // Get directory attributes.
-
-        return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY); // Check if it is a directory.
+        const DWORD attributes = GetFileAttributesA(path.c_str());
+        return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY);
     }
 
     inline bool CreateNewDirectory(const std::string& path, bool createAlways = false)
     {
-        if (DirectoryExists(path) && !createAlways) // Check if directory exists and if it should not be created.
+        if (DirectoryExists(path) && !createAlways)
         {
-            return true; // Return true since the directory is already present.
+            return true;
         }
 
-        return CreateDirectoryA(path.c_str(), nullptr) != 0; // Try to create the directory.
+        if (CreateDirectoryA(path.c_str(), nullptr) == 0) // Check if directory creation failed
+        {
+            DWORD error = GetLastError();
+            // Optionally, log or handle error here
+            return false;
+        }
+
+        return true;
     }
 
     inline void delay(int milliseconds)
     {
-        Sleep(static_cast<DWORD>(milliseconds)); // Sleep for specified milliseconds.
+        Sleep(static_cast<DWORD>(milliseconds));
     }
 
     inline void clear()
     {
-        system("cls"); // Clear the console.
+        system("cls");
     }
 
     inline void pause()
     {
-        system("pause"); // Pause the system (wait for user input).
+        system("pause");
     }
 }

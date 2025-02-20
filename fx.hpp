@@ -15,24 +15,21 @@ namespace fx
     {
     public:
         using TFunc = std::function<bool(Args...)>;
-
-    public:
+    
         struct callback
         {
             TFunc function;
             std::unique_ptr<callback> next = nullptr;
             int order = 0;
-            size_t cookie = -1;
+            size_t cookie = 0;
 
-            callback(TFunc func)
-                : function(func)
-            {
-            }
+            explicit callback(TFunc func)
+                : function(std::move(func)) {}
         };
-
+    
         std::unique_ptr<callback> m_callbacks;
         std::atomic<size_t> m_connectCookie = 0;
-        mutable std::mutex m_callbacksMutex;  // Mutex to protect callback list
+        mutable std::mutex m_callbacksMutex;
     };
 
     class Resource
@@ -67,14 +64,14 @@ namespace fx
     inline size_t ConnectInternal(fx::fwEvent<Args...>& event, typename fx::fwEvent<Args...>::TFunc func, int order)
     {
         if (!func)
-            return -1;
+            return static_cast<size_t>(-1);
 
-        auto cookie = event.m_connectCookie++;
-        auto cb = std::unique_ptr<typename fx::fwEvent<Args...>::callback>(new typename fx::fwEvent<Args...>::callback(func));
+        size_t cookie = event.m_connectCookie.fetch_add(1, std::memory_order_relaxed);
+        auto cb = std::make_unique<typename fx::fwEvent<Args...>::callback>(std::move(func));
         cb->order = order;
         cb->cookie = cookie;
 
-        std::lock_guard<std::mutex> lock(event.m_callbacksMutex);  // Lock the callback list for thread safety
+        std::unique_lock<std::mutex> lock(event.m_callbacksMutex);
 
         if (!event.m_callbacks)
         {
@@ -82,7 +79,7 @@ namespace fx
         }
         else
         {
-            auto cur = &event.m_callbacks;
+            auto* cur = &event.m_callbacks;
             typename fx::fwEvent<Args...>::callback* last = nullptr;
 
             while (*cur && order >= (*cur)->order)
@@ -107,19 +104,23 @@ namespace fx
     template<typename... Args, typename T>
     inline auto Connect(fx::fwEvent<Args...>& event, T func, int order)
     {
-        if constexpr (std::is_same_v<std::invoke_result_t<T, Args...>, bool>)
+        if constexpr (std::is_invocable_r_v<bool, T, Args...>)
         {
             return ConnectInternal(event, func, order);
         }
-        else
+        else if constexpr (std::is_invocable_v<T, Args...>)
         {
             return ConnectInternal(event, [func](Args&&... args)
                 {
-                    std::invoke(func, args...);
+                    std::invoke(func, std::forward<Args>(args)...);
                     return true;
                 },
                 order);
         }
+        else
+        {
+            static_assert(sizeof...(Args) == 0, "Invalid function signature.");
+            return static_cast<size_t>(-1);
+        }
     }
-
 }
