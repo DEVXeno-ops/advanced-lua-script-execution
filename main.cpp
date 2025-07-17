@@ -3,10 +3,12 @@
 #include <vector>
 #include <iostream>
 #include <unordered_map>
+#include <unordered_set>
 #include <regex>
 #include <shared_mutex>
 #include <functional>
 #include <string>
+#include <filesystem>
 
 #include "file.hpp"
 #include "fx.hpp"
@@ -33,15 +35,16 @@ namespace memory {
         g_allResources = reinterpret_cast<std::vector<fx::ResourceImpl*>*>(resourceModule + 0xAE6C0);
         g_netLibrary = reinterpret_cast<fx::NetLibrary**>(netFiveModule + 0x1F41D8);
 
-        if (!g_allResources || !g_netLibrary) {
-            MessageBoxA(0, "Memory initialization failed. Offsets might be outdated.", "Error", MB_ICONERROR);
+        // เพิ่มเช็กค่าที่ dereference แล้ว
+        if (!g_allResources || !*g_allResources || !g_netLibrary || !*g_netLibrary) {
+            MessageBoxA(0, "Memory initialization failed. Offsets might be outdated or memory inaccessible.", "Error", MB_ICONERROR);
             return false;
         }
         return true;
     }
 
     void ForAllResources(const std::function<void(fx::ResourceImpl*)>& cb) {
-        if (g_allResources) {
+        if (g_allResources && *g_allResources) {
             for (auto& resource : *g_allResources) {
                 if (resource) {
                     cb(resource);
@@ -58,13 +61,13 @@ namespace ch {
         static const std::unordered_set<char> illegalChars = {'\\', '/', ':', '*', '?', '"', '<', '>', '|'};
         std::string result;
         result.reserve(filename.size());
-        
+
         for (char c : filename) {
             if (illegalChars.find(c) == illegalChars.end()) {
                 result.push_back(c);
             }
         }
-        
+
         return std::regex_replace(result, std::regex("http"), "");
     }
 
@@ -84,9 +87,8 @@ namespace ch {
         bool AddCachedScript(int index, const std::string& data, const std::string& directoryPath) {
             std::unique_lock<std::shared_mutex> lock(m_mutex);
 
-            // Avoid duplication
             if (m_cachedScripts.find(index) != m_cachedScripts.end()) {
-                return false;
+                return false; // Script already cached
             }
 
             CachedScript newScript;
@@ -94,7 +96,10 @@ namespace ch {
             newScript.SetData(data);
             m_cachedScripts[index] = newScript;
 
-            win32::File fileHandle(directoryPath + GetName() + "\\script_" + std::to_string(index) + ".lua");
+            std::filesystem::path dirPath = directoryPath + GetName();
+            std::filesystem::create_directories(dirPath);  // Ensure directory exists
+
+            win32::File fileHandle((dirPath / ("script_" + std::to_string(index) + ".lua")).string());
             return fileHandle.Write(data);
         }
 
@@ -112,6 +117,7 @@ namespace ch {
 
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved) {
     if (reason == DLL_PROCESS_ATTACH) {
+        DisableThreadLibraryCalls(module); // ป้องกันไม่ให้เรียก DllMain ซ้ำหลายครั้ง
         if (!memory::InitMemory()) {
             return FALSE;
         }

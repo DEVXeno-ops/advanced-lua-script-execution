@@ -2,11 +2,27 @@
 
 #include <map>
 #include <sstream>
+#include <algorithm>
+#include <cctype>
+#include <stdexcept>
 #include "file.hpp"
 #include "lua.hpp" // Include Lua header
 
 namespace pIni
 {
+    inline std::string trim(const std::string& s)
+    {
+        auto start = s.begin();
+        while (start != s.end() && std::isspace(*start)) ++start;
+
+        auto end = s.end();
+        do {
+            --end;
+        } while (std::distance(start, end) > 0 && std::isspace(*end));
+
+        return std::string(start, end + 1);
+    }
+
     class Section
     {
     private:
@@ -39,7 +55,7 @@ namespace pIni
     private:
         std::string m_fileName;
         std::map<std::string, Section> m_sections;
-    
+
     public:
         explicit Archive(const std::string& filename) : m_fileName(filename)
         {
@@ -48,6 +64,7 @@ namespace pIni
 
             if (!file.Read(content))
             {
+                // อาจ log หรือแจ้งเตือนที่นี่
                 return;
             }
 
@@ -56,19 +73,22 @@ namespace pIni
 
             while (std::getline(contentStream, line))
             {
-                if (line.empty() || line[0] == ';' || line[0] == '#') continue; // Ignore comments
+                // ตัด \r ที่อาจมีติดท้าย (จาก Windows line ending)
+                if (!line.empty() && line.back() == '\r') line.pop_back();
+
+                if (line.empty() || line[0] == ';' || line[0] == '#') continue;
 
                 if (line.front() == '[' && line.back() == ']')
                 {
-                    section = line.substr(1, line.size() - 2);
+                    section = trim(line.substr(1, line.size() - 2));
                 }
                 else if (!section.empty())
                 {
                     auto delimiterPos = line.find('=');
                     if (delimiterPos != std::string::npos)
                     {
-                        std::string key = line.substr(0, delimiterPos);
-                        std::string value = line.substr(delimiterPos + 1);
+                        std::string key = trim(line.substr(0, delimiterPos));
+                        std::string value = trim(line.substr(delimiterPos + 1));
                         m_sections[section][key] = value;
                     }
                 }
@@ -97,12 +117,9 @@ namespace pIni
             return m_sections.find(section) != m_sections.end();
         }
 
+        // เปลี่ยนให้สร้าง section ใหม่ถ้าไม่มี
         Section& operator[](const std::string& section)
         {
-            if (!Exist(section))
-            {
-                throw std::runtime_error("Section does not exist: " + section);
-            }
             return m_sections[section];
         }
 

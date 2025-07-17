@@ -4,6 +4,7 @@
 #include <Windows.h>
 #include <memory>
 #include <vector>
+#include <iostream>
 
 namespace win32
 {
@@ -13,30 +14,30 @@ namespace win32
         std::string fileName;
 
     public:
-        File(const std::string& fileName) : fileName(fileName) {}
+        explicit File(const std::string& fileName) : fileName(fileName) {}
         ~File() = default;
 
         bool Read(std::string& content)
         {
             HANDLE fileHandle = INVALID_HANDLE_VALUE;
-            if (!GetFileHandle(OPEN_EXISTING, fileHandle))
+            if (!GetFileHandleForRead(fileHandle))
             {
                 return false;
             }
 
-            const DWORD fileSize = GetFileSize(fileHandle, nullptr);
-            if (fileSize == INVALID_FILE_SIZE)
+            LARGE_INTEGER fileSize;
+            if (!GetFileSizeEx(fileHandle, &fileSize) || fileSize.QuadPart == 0)
             {
                 CloseHandle(fileHandle);
                 return false;
             }
 
-            std::vector<char> buffer(fileSize);
+            std::vector<char> buffer(static_cast<size_t>(fileSize.QuadPart));
             DWORD bytesRead = 0;
-            const BOOL result = ReadFile(fileHandle, buffer.data(), fileSize, &bytesRead, nullptr);
+            const BOOL result = ReadFile(fileHandle, buffer.data(), static_cast<DWORD>(fileSize.QuadPart), &bytesRead, nullptr);
             CloseHandle(fileHandle);
 
-            if (result == 0 || bytesRead != fileSize)
+            if (result == 0 || bytesRead != fileSize.QuadPart)
             {
                 return false;
             }
@@ -48,23 +49,45 @@ namespace win32
         bool Write(const std::string& content)
         {
             HANDLE fileHandle = INVALID_HANDLE_VALUE;
-            if (!GetFileHandle(CREATE_ALWAYS, fileHandle))
+            if (!GetFileHandleForWrite(fileHandle))
             {
                 return false;
             }
 
             DWORD bytesWritten = 0;
-            const BOOL result = WriteFile(fileHandle, content.c_str(), content.size(), &bytesWritten, nullptr);
+            const BOOL result = WriteFile(fileHandle, content.c_str(), static_cast<DWORD>(content.size()), &bytesWritten, nullptr);
             CloseHandle(fileHandle);
 
             return result != 0 && bytesWritten == content.size();
         }
 
     private:
-        bool GetFileHandle(DWORD flag, HANDLE& handle) const
+        bool GetFileHandleForRead(HANDLE& handle) const
         {
-            handle = CreateFileA(fileName.c_str(), GENERIC_READ | GENERIC_WRITE,
-                0, nullptr, flag, FILE_ATTRIBUTE_NORMAL, nullptr);
+            handle = CreateFileA(
+                fileName.c_str(),
+                GENERIC_READ,
+                FILE_SHARE_READ,
+                nullptr,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                nullptr
+            );
+
+            return handle != INVALID_HANDLE_VALUE;
+        }
+
+        bool GetFileHandleForWrite(HANDLE& handle) const
+        {
+            handle = CreateFileA(
+                fileName.c_str(),
+                GENERIC_WRITE,
+                0,
+                nullptr,
+                CREATE_ALWAYS,
+                FILE_ATTRIBUTE_NORMAL,
+                nullptr
+            );
 
             return handle != INVALID_HANDLE_VALUE;
         }
@@ -79,24 +102,28 @@ namespace win32
     inline bool DirectoryExists(const std::string& path)
     {
         const DWORD attributes = GetFileAttributesA(path.c_str());
-        return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY);
+        return (attributes != INVALID_FILE_ATTRIBUTES) && (attributes & FILE_ATTRIBUTE_DIRECTORY);
     }
 
     inline bool CreateNewDirectory(const std::string& path, bool createAlways = false)
     {
-        if (DirectoryExists(path) && !createAlways)
+        if (DirectoryExists(path))
         {
             return true;
         }
 
-        if (CreateDirectoryA(path.c_str(), nullptr) == 0) // Check if directory creation failed
+        if (CreateDirectoryA(path.c_str(), nullptr))
         {
-            DWORD error = GetLastError();
-            // Optionally, log or handle error here
-            return false;
+            return true;
         }
 
-        return true;
+        DWORD err = GetLastError();
+        if (err == ERROR_ALREADY_EXISTS)
+        {
+            return DirectoryExists(path);
+        }
+
+        return false;
     }
 
     inline void delay(int milliseconds)

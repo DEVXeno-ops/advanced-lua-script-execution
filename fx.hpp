@@ -15,7 +15,7 @@ namespace fx
     {
     public:
         using TFunc = std::function<bool(Args...)>;
-    
+
         struct callback
         {
             TFunc function;
@@ -26,7 +26,7 @@ namespace fx
             explicit callback(TFunc func)
                 : function(std::move(func)) {}
         };
-    
+
         std::unique_ptr<callback> m_callbacks;
         std::atomic<size_t> m_connectCookie = 0;
         mutable std::mutex m_callbacksMutex;
@@ -73,49 +73,42 @@ namespace fx
 
         std::unique_lock<std::mutex> lock(event.m_callbacksMutex);
 
-        if (!event.m_callbacks)
+        // Insert callback in ordered position (ascending by order)
+        if (!event.m_callbacks || order < event.m_callbacks->order)
         {
+            cb->next = std::move(event.m_callbacks);
             event.m_callbacks = std::move(cb);
         }
         else
         {
-            auto* cur = &event.m_callbacks;
-            typename fx::fwEvent<Args...>::callback* last = nullptr;
-
-            while (*cur && order >= (*cur)->order)
+            auto* current = event.m_callbacks.get();
+            while (current->next && current->next->order <= order)
             {
-                last = cur->get();
-                cur = &(*cur)->next;
+                current = current->next.get();
             }
-
-            cb->next = std::move(*cur);
-            (!last ? event.m_callbacks : last->next) = std::move(cb);
+            cb->next = std::move(current->next);
+            current->next = std::move(cb);
         }
 
         return cookie;
     }
 
+    // เปลี่ยนชื่อ Connect ให้ไม่เรียกตัวเองแบบ recursive
     template<typename... Args, typename T>
-    inline auto Connect(fx::fwEvent<Args...>& event, T func)
-    {
-        return Connect(event, func, 0);
-    }
-
-    template<typename... Args, typename T>
-    inline auto Connect(fx::fwEvent<Args...>& event, T func, int order)
+    inline auto Connect(fx::fwEvent<Args...>& event, T&& func, int order = 0)
     {
         if constexpr (std::is_invocable_r_v<bool, T, Args...>)
         {
-            return ConnectInternal(event, func, order);
+            return ConnectInternal(event, std::forward<T>(func), order);
         }
         else if constexpr (std::is_invocable_v<T, Args...>)
         {
-            return ConnectInternal(event, [func](Args&&... args)
+            return ConnectInternal(event,
+                [f = std::forward<T>(func)](Args&&... args) -> bool
                 {
-                    std::invoke(func, std::forward<Args>(args)...);
+                    std::invoke(f, std::forward<Args>(args)...);
                     return true;
-                },
-                order);
+                }, order);
         }
         else
         {
